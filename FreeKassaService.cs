@@ -4,7 +4,9 @@ using FreeKassa.COM.Exceptions;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace FreeKassa.COM
@@ -73,40 +75,44 @@ namespace FreeKassa.COM
             long nonce = CurrentUnixTimeInMilliseconds();
             string signature = GenerateSignature(nonce);
 
-            var requestUri = $"orders?shopId={_shopId}&nonce={nonce}&signature={signature}";
+            // Формируем URI с параметрами запроса
+            var requestUri = new StringBuilder($"orders?shopId={_shopId}&nonce={nonce}&signature={signature}");
 
+            // Добавляем необязательные параметры
             if (request.OrderId.HasValue)
             {
-                requestUri += $"&orderId={request.OrderId}";
+                requestUri.Append($"&orderId={request.OrderId}");
             }
 
             if (!string.IsNullOrEmpty(request.PaymentId))
             {
-                requestUri += $"&paymentId={request.PaymentId}";
+                requestUri.Append($"&paymentId={request.PaymentId}");
             }
 
             if (request.OrderStatus.HasValue)
             {
-                requestUri += $"&orderStatus={request.OrderStatus}";
+                requestUri.Append($"&orderStatus={request.OrderStatus}");
             }
 
             if (!string.IsNullOrEmpty(request.DateFrom))
             {
-                requestUri += $"&dateFrom={request.DateFrom}";
+                requestUri.Append($"&dateFrom={request.DateFrom}");
             }
 
             if (!string.IsNullOrEmpty(request.DateTo))
             {
-                requestUri += $"&dateTo={request.DateTo}";
+                requestUri.Append($"&dateTo={request.DateTo}");
             }
 
             if (request.Page.HasValue)
             {
-                requestUri += $"&page={request.Page}";
+                requestUri.Append($"&page={request.Page}");
             }
 
-            var response = await _httpClient.GetAsync(requestUri);
+            // Отправляем GET-запрос
+            var response = await _httpClient.GetAsync(requestUri.ToString());
 
+            // Обрабатываем ответ
             if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
             {
                 var errorResponse = await response.Content.ReadAsStringAsync();
@@ -151,36 +157,36 @@ namespace FreeKassa.COM
             var signature = GenerateSignature(nonce);
 
             // Формируем URI с параметрами запроса
-            var requestUri = $"orders/create?shopId={_shopId}&nonce={nonce}&signature={signature}&i={request.PaymentSystemId}&email={request.Email}&ip={request.Ip}&amount={request.Amount}&currency={request.Currency}";
+            var requestUri = new StringBuilder($"orders/create?shopId={_shopId}&nonce={nonce}&signature={signature}&i={request.PaymentSystemId}&email={request.Email}&ip={request.Ip}&amount={request.Amount}&currency={request.Currency}");
 
             // Добавляем необязательные параметры
             if (!string.IsNullOrEmpty(request.PaymentId))
             {
-                requestUri += $"&paymentId={request.PaymentId}";
+                requestUri.Append($"&paymentId={request.PaymentId}");
             }
 
             if (!string.IsNullOrEmpty(request.Tel))
             {
-                requestUri += $"&tel={request.Tel}";
+                requestUri.Append($"&tel={request.Tel}");
             }
 
             if (!string.IsNullOrEmpty(request.SuccessUrl))
             {
-                requestUri += $"&success_url={request.SuccessUrl}";
+                requestUri.Append($"&success_url={request.SuccessUrl}");
             }
 
             if (!string.IsNullOrEmpty(request.FailureUrl))
             {
-                requestUri += $"&failure_url={request.FailureUrl}";
+                requestUri.Append($"&failure_url={request.FailureUrl}");
             }
 
             if (!string.IsNullOrEmpty(request.NotificationUrl))
             {
-                requestUri += $"&notification_url={request.NotificationUrl}";
+                requestUri.Append($"&notification_url={request.NotificationUrl}");
             }
 
             // Отправляем POST-запрос
-            var response = await _httpClient.PostAsync(requestUri, null);
+            var response = await _httpClient.PostAsync(requestUri.ToString(), null);
 
             // Обрабатываем ответ
             if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
