@@ -3,6 +3,12 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
     <Nullable>enable</Nullable>
+    <PackageId>FreeKassa.COM</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Malomalsky</Authors>
+    <Company>by Malomalsky</Company>
+    <PackageDescription>Unofficial implementation of integration to the service FreeKassa.com</PackageDescription>
+    <RepositoryUrl>https://github.com/OWNER/REPOSITORY</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
