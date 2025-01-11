@@ -71,8 +71,12 @@ namespace FreeKassa.COM
             // Проверяем обязательные параметры
             request.Validate();
 
+            // Генерируем подпись
+            var nonce = CurrentUnixTimeInMilliseconds();
+            var signature = GenerateSignature(nonce);
+
             // Формируем URI с параметрами запроса
-            var requestUri = $"orders/create?shopId={request.ShopId}&nonce={request.Nonce}&signature={request.Signature}&i={request.PaymentSystemId}&email={request.Email}&ip={request.Ip}&amount={request.Amount}&currency={request.Currency}";
+            var requestUri = $"orders/create?shopId={_shopId}&nonce={nonce}&signature={signature}&i={request.PaymentSystemId}&email={request.Email}&ip={request.Ip}&amount={request.Amount}&currency={request.Currency}";
 
             // Добавляем необязательные параметры
             if (!string.IsNullOrEmpty(request.PaymentId))
