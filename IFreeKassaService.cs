@@ -42,7 +42,7 @@ namespace FreeKassa.COM
         /// <summary>
         /// Получает список доступных платежных систем.
         /// </summary>
-        Task<CurrencyListResponse> GetCurrenciesAsync();
+        Task<CurrenciesResponse> GetCurrenciesAsync();
 
         /// <summary>
         /// Проверяет доступность указанной платежной системы для оплаты.

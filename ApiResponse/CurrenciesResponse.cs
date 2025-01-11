@@ -1,13 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Collections.Generic;
 
 namespace FreeKassa.COM.ApiResponse
 {
     /// <summary>
     /// Ответ от API, содержащий список валют.
     /// </summary>
-    public class CurrencyListResponse
+    public class CurrenciesResponse
     {
         /// <summary>
         /// Тип ответа (например, "success").

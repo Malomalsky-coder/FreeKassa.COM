@@ -63,11 +63,41 @@ namespace FreeKassa.COM
         /// <summary>
         /// Получает список заказов.
         /// </summary>
-        /// <param name="request">Тело запроса.</param>
+        /// <param name="request">Параметры запроса для фильтрации заказов.</param>
         /// <returns>Список заказов.</returns>
-        /// <exception cref="BadRequestException">Возникает при ошибке 400 (Bad Request).</exception>
-        /// <exception cref="UnauthorizedException">Возникает при ошибке 401 (Unauthorized).</exception>
-        /// <exception cref="Exception">Возникает при других ошибках.</exception>
+        /// <exception cref="BadRequestException">Ошибка 400 (Bad Request).</exception>
+        /// <exception cref="UnauthorizedException">Ошибка 401 (Unauthorized).</exception>
+        /// <exception cref="Exception">Другие ошибки.</exception>
+        /// <example>
+        /// Пример использования:
+        /// <code>
+        /// var request = new GetOrdersRequest
+        /// {
+        ///     OrderId = 123456789,
+        ///     DateFrom = "2023-01-01",
+        ///     DateTo = "2023-12-31",
+        ///     Page = 1
+        /// };
+        ///
+        /// try
+        /// {
+        ///     var ordersResponse = await _freeKassaService.GetOrdersAsync(request);
+        ///     Console.WriteLine($"Найдено заказов: {ordersResponse.Orders.Count}");
+        /// }
+        /// catch (BadRequestException ex)
+        /// {
+        ///     Console.WriteLine($"Ошибка 400: {ex.Message}");
+        /// }
+        /// catch (UnauthorizedException)
+        /// {
+        ///     Console.WriteLine("Ошибка 401: Неверная авторизация.");
+        /// }
+        /// catch (Exception ex)
+        /// {
+        ///     Console.WriteLine($"Ошибка: {ex.Message}");
+        /// }
+        /// </code>
+        /// </example>
         public async Task<GetOrdersResponse> GetOrdersAsync(GetOrdersRequest request)
         {
             request.Validate();
@@ -140,13 +170,46 @@ namespace FreeKassa.COM
         }
 
         /// <summary>
-        /// Создаёт заказ и возвращает ссылку на оплату.
+        /// Создает новый заказ.
         /// </summary>
-        /// <param name="request">Тело запроса.</param>
-        /// <returns>Ссылка на оплату.</returns>
-        /// <exception cref="BadRequestException">Возникает при ошибке 400 (Bad Request).</exception>
-        /// <exception cref="UnauthorizedException">Возникает при ошибке 401 (Unauthorized).</exception>
-        /// <exception cref="Exception">Возникает при других ошибках.</exception>
+        /// <param name="request">Параметры запроса для создания заказа.</param>
+        /// <returns>URL для оплаты заказа.</returns>
+        /// <exception cref="BadRequestException">Ошибка 400 (Bad Request).</exception>
+        /// <exception cref="UnauthorizedException">Ошибка 401 (Unauthorized).</exception>
+        /// <exception cref="Exception">Другие ошибки.</exception>
+        /// <example>
+        /// Пример использования:
+        /// <code>
+        /// var request = new CreateOrderRequest
+        /// {
+        ///     PaymentSystemId = 1,
+        ///     Email = "test@example.com",
+        ///     Ip = "127.0.0.1",
+        ///     Amount = 100.50m,
+        ///     Currency = "RUB",
+        ///     SuccessUrl = "https://example.com/success",
+        ///     FailureUrl = "https://example.com/failure"
+        /// };
+        ///
+        /// try
+        /// {
+        ///     var paymentUrl = await _freeKassaService.CreateOrderAsync(request);
+        ///     Console.WriteLine($"URL для оплаты: {paymentUrl}");
+        /// }
+        /// catch (BadRequestException ex)
+        /// {
+        ///     Console.WriteLine($"Ошибка 400: {ex.Message}");
+        /// }
+        /// catch (UnauthorizedException)
+        /// {
+        ///     Console.WriteLine("Ошибка 401: Неверная авторизация.");
+        /// }
+        /// catch (Exception ex)
+        /// {
+        ///     Console.WriteLine($"Ошибка: {ex.Message}");
+        /// }
+        /// </code>
+        /// </example>
         public async Task<string> CreateOrderAsync(CreateOrderRequest request)
         {
             // Проверяем обязательные параметры
@@ -219,6 +282,87 @@ namespace FreeKassa.COM
             }
         }
 
+        /// <summary>
+        /// Выполняет возврат средств по заказу.
+        /// </summary>
+        /// <param name="orderId">Номер заказа Freekassa.</param>
+        /// <param name="paymentId">Номер заказа в магазине.</param>
+        /// <returns>Ответ от сервера с результатом возврата.</returns>
+        /// <exception cref="BadRequestException">Ошибка 400 (Bad Request).</exception>
+        /// <exception cref="UnauthorizedException">Ошибка 401 (Unauthorized).</exception>
+        /// <exception cref="Exception">Другие ошибки.</exception>
+        /// <example>
+        /// Пример использования:
+        /// <code>
+        /// try
+        /// {
+        ///     var refundResponse = await _freeKassaService.RefundAsync(orderId: 123456789);
+        ///     Console.WriteLine($"Возврат успешно выполнен. ID возврата: {refundResponse.Id}");
+        /// }
+        /// catch (BadRequestException ex)
+        /// {
+        ///     Console.WriteLine($"Ошибка 400: {ex.Message}");
+        /// }
+        /// catch (UnauthorizedException)
+        /// {
+        ///     Console.WriteLine("Ошибка 401: Неверная авторизация.");
+        /// }
+        /// catch (Exception ex)
+        /// {
+        ///     Console.WriteLine($"Ошибка: {ex.Message}");
+        /// }
+        /// </code>
+        /// </example>
+        public async Task<RefundResponse> RefundAsync(int? orderId = null, string paymentId = null)
+        {
+            if (orderId == null && string.IsNullOrEmpty(paymentId))
+            {
+                throw new ArgumentException("Необходимо указать orderId или paymentId.");
+            }
+
+            long nonce = CurrentUnixTimeInMilliseconds();
+            string signature = GenerateSignature(nonce);
+
+            var requestUri = new StringBuilder($"refund?shopId={_shopId}&nonce={nonce}&signature={signature}");
+
+            if (orderId.HasValue)
+            {
+                requestUri.Append($"&orderId={orderId}");
+            }
+
+            if (!string.IsNullOrEmpty(paymentId))
+            {
+                requestUri.Append($"&paymentId={paymentId}");
+            }
+
+            var response = await _httpClient.PostAsync(requestUri.ToString(), null);
+
+            if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                var errorResponse = await response.Content.ReadAsStringAsync();
+                var error = JsonConvert.DeserializeObject<ApiErrorResponse>(errorResponse);
+                throw new BadRequestException(error!.Message);
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                throw new UnauthorizedException();
+            }
+            else if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception($"Ошибка: {response.StatusCode}");
+            }
+
+            var responseBody = await response.Content.ReadAsStringAsync();
+            var responseJson = JsonConvert.DeserializeObject<RefundResponse>(responseBody);
+
+            if (responseJson!.Type != "success")
+            {
+                throw new Exception("Неизвестный тип ответа.");
+            }
+
+            return responseJson;
+        }
+
         #endregion
 
         #region Выплаты
@@ -227,13 +371,36 @@ namespace FreeKassa.COM
         #region Разное
 
         /// <summary>
-        /// Получает список валют, доступных для оплаты.
+        /// Проверяет статус валюты.
         /// </summary>
-        /// <returns>Объект <see cref="CurrencyListResponse"/>, содержащий список валют.</returns>
-        /// <exception cref="BadRequestException">Возникает при ошибке 400 (Bad Request).</exception>
-        /// <exception cref="UnauthorizedException">Возникает при ошибке 401 (Unauthorized).</exception>
-        /// <exception cref="Exception">Возникает при других ошибках.</exception>
-        public async Task<CurrencyListResponse> GetCurrenciesAsync()
+        /// <param name="currency">Код валюты для проверки.</param>
+        /// <returns>Статус валюты.</returns>
+        /// <exception cref="BadRequestException">Ошибка 400 (Bad Request).</exception>
+        /// <exception cref="UnauthorizedException">Ошибка 401 (Unauthorized).</exception>
+        /// <exception cref="Exception">Другие ошибки.</exception>
+        /// <example>
+        /// Пример использования:
+        /// <code>
+        /// try
+        /// {
+        ///     var statusResponse = await _freeKassaService.CheckCurrencyStatusAsync("RUB");
+        ///     Console.WriteLine($"Статус валюты RUB: {statusResponse.Status}");
+        /// }
+        /// catch (BadRequestException ex)
+        /// {
+        ///     Console.WriteLine($"Ошибка 400: {ex.Message}");
+        /// }
+        /// catch (UnauthorizedException)
+        /// {
+        ///     Console.WriteLine("Ошибка 401: Неверная авторизация.");
+        /// }
+        /// catch (Exception ex)
+        /// {
+        ///     Console.WriteLine($"Ошибка: {ex.Message}");
+        /// }
+        /// </code>
+        /// </example>
+        public async Task<CurrenciesResponse> GetCurrenciesAsync()
         {
             long nonce = CurrentUnixTimeInMilliseconds();
             string signature = GenerateSignature(nonce);
@@ -258,7 +425,7 @@ namespace FreeKassa.COM
             }
 
             var responseBody = await response.Content.ReadAsStringAsync();
-            var responseJson = JsonConvert.DeserializeObject<CurrencyListResponse>(responseBody);
+            var responseJson = JsonConvert.DeserializeObject<CurrenciesResponse>(responseBody);
 
             if (responseJson!.Type != "success")
             {
