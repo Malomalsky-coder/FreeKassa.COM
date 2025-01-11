@@ -8,7 +8,7 @@
     <Authors>Malomalsky</Authors>
     <Company>by Malomalsky</Company>
     <PackageDescription>Unofficial implementation of integration to the service FreeKassa.com</PackageDescription>
-    <RepositoryUrl>https://github.com/OWNER/REPOSITORY</RepositoryUrl>
+    <RepositoryUrl>https://github.com/Malomalsky-coder/FreeKassa.COM</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
