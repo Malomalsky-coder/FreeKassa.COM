@@ -3,7 +3,6 @@ using FreeKassa.COM.ApiResponse;
 using FreeKassa.COM.Exceptions;
 using Newtonsoft.Json;
 using System;
-using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading.Tasks;
 
@@ -179,43 +178,6 @@ namespace FreeKassa.COM
 
             var responseBody = await response.Content.ReadAsStringAsync();
             return JsonConvert.DeserializeObject<CurrencyListResponse>(responseBody);
-        }
-
-        /// <summary>
-        /// Проверяет статус валюты.
-        /// </summary>
-        /// <returns>True, если валюта доступна, False в противном случае.</returns>
-        /// <exception cref="BadRequestException">Возникает при ошибке 400 (Bad Request).</exception>
-        /// <exception cref="UnauthorizedException">Возникает при ошибке 401 (Unauthorized).</exception>
-        /// <exception cref="Exception">Возникает при других ошибках.</exception>
-        public async Task<bool> CheckCurrencyStatusAsync()
-        {
-            long nonce = CurrentUnixTimeInMilliseconds();
-            string signature = GenerateSignature(nonce);
-
-            var requestUri = $"check?shopId={_shopId}&nonce={nonce}&signature={signature}";
-
-            var response = await _httpClient.GetAsync(requestUri);
-
-            if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
-            {
-                var errorResponse = await response.Content.ReadAsStringAsync();
-                var error = JsonConvert.DeserializeObject<ApiErrorResponse>(errorResponse);
-                throw new BadRequestException(error.Message);
-            }
-            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-            {
-                throw new UnauthorizedException();
-            }
-            else if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception($"Ошибка: {response.StatusCode}");
-            }
-
-            var responseBody = await response.Content.ReadAsStringAsync();
-            var responseJson = JsonConvert.DeserializeObject<Dictionary<string, string>>(responseBody);
-
-            return responseJson["type"] == "success";
         }
 
         #endregion

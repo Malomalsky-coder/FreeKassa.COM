@@ -47,7 +47,7 @@ namespace FreeKassa.COM
         /// <summary>
         /// Проверяет доступность указанной платежной системы для оплаты.
         /// </summary>
-        Task<object> CheckCurrencyStatusAsync(object request);
+        //Task<object> CheckCurrencyStatusAsync(object request);
 
         /// <summary>
         /// Получает список доступных платежных систем для вывода средств.
