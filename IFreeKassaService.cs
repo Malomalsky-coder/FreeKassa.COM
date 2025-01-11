@@ -12,7 +12,7 @@ namespace FreeKassa.COM
         /// <summary>
         /// Получает список заказов.
         /// </summary>
-        //Task<object> GetOrdersAsync();
+        Task<GetOrdersResponse> GetOrdersAsync(GetOrdersRequest request);
 
         /// <summary>
         /// Создает новый заказ и возвращает ссылку на оплату.

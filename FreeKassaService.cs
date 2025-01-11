@@ -32,7 +32,6 @@ namespace FreeKassa.COM
         //TODO: Список выплат - https://docs.freekassa.com/#operation/getWithdrawals
         //TODO: Создать выплату - https://docs.freekassa.com/#operation/createWithdrawal
         //TODO: Получение баланса - https://docs.freekassa.com/#operation/getBalance
-        //TODO: Проверка доступности платежной системы для оплаты - https://docs.freekassa.com/#operation/currencyStatus
         //TODO: Получение списка доступных платежных систем для вывода - https://docs.freekassa.com/#operation/getWithdrawalsCurrencies
         //TODO: Получение списка Ваших магазинов - https://docs.freekassa.com/#operation/getShops
 
@@ -58,6 +57,81 @@ namespace FreeKassa.COM
         }
 
         #region Заказы
+
+        /// <summary>
+        /// Получает список заказов.
+        /// </summary>
+        /// <param name="request">Тело запроса.</param>
+        /// <returns>Список заказов.</returns>
+        /// <exception cref="BadRequestException">Возникает при ошибке 400 (Bad Request).</exception>
+        /// <exception cref="UnauthorizedException">Возникает при ошибке 401 (Unauthorized).</exception>
+        /// <exception cref="Exception">Возникает при других ошибках.</exception>
+        public async Task<GetOrdersResponse> GetOrdersAsync(GetOrdersRequest request)
+        {
+            request.Validate();
+
+            long nonce = CurrentUnixTimeInMilliseconds();
+            string signature = GenerateSignature(nonce);
+
+            var requestUri = $"orders?shopId={_shopId}&nonce={nonce}&signature={signature}";
+
+            if (request.OrderId.HasValue)
+            {
+                requestUri += $"&orderId={request.OrderId}";
+            }
+
+            if (!string.IsNullOrEmpty(request.PaymentId))
+            {
+                requestUri += $"&paymentId={request.PaymentId}";
+            }
+
+            if (request.OrderStatus.HasValue)
+            {
+                requestUri += $"&orderStatus={request.OrderStatus}";
+            }
+
+            if (!string.IsNullOrEmpty(request.DateFrom))
+            {
+                requestUri += $"&dateFrom={request.DateFrom}";
+            }
+
+            if (!string.IsNullOrEmpty(request.DateTo))
+            {
+                requestUri += $"&dateTo={request.DateTo}";
+            }
+
+            if (request.Page.HasValue)
+            {
+                requestUri += $"&page={request.Page}";
+            }
+
+            var response = await _httpClient.GetAsync(requestUri);
+
+            if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                var errorResponse = await response.Content.ReadAsStringAsync();
+                var error = JsonConvert.DeserializeObject<ApiErrorResponse>(errorResponse);
+                throw new BadRequestException(error!.Message);
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                throw new UnauthorizedException();
+            }
+            else if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception($"Ошибка: {response.StatusCode}");
+            }
+
+            var responseBody = await response.Content.ReadAsStringAsync();
+            var responseJson = JsonConvert.DeserializeObject<GetOrdersResponse>(responseBody);
+
+            if (responseJson!.Type != "success")
+            {
+                throw new Exception("Неизвестный тип ответа.");
+            }
+
+            return responseJson;
+        }
 
         /// <summary>
         /// Создаёт заказ и возвращает ссылку на оплату.
@@ -113,7 +187,7 @@ namespace FreeKassa.COM
             {
                 var errorResponse = await response.Content.ReadAsStringAsync();
                 var error = JsonConvert.DeserializeObject<ApiErrorResponse>(errorResponse);
-                throw new BadRequestException(error.Message);
+                throw new BadRequestException(error!.Message);
             }
             else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
@@ -129,7 +203,7 @@ namespace FreeKassa.COM
             var orderResponse = JsonConvert.DeserializeObject<CreateOrderResponse>(responseBody);
 
             // Возвращаем ссылку на оплату
-            if (orderResponse.Type == "success")
+            if (orderResponse!.Type == "success")
             {
                 return orderResponse.Location;
             }
@@ -166,7 +240,7 @@ namespace FreeKassa.COM
             {
                 var errorResponse = await response.Content.ReadAsStringAsync();
                 var error = JsonConvert.DeserializeObject<ApiErrorResponse>(errorResponse);
-                throw new BadRequestException(error.Message);
+                throw new BadRequestException(error!.Message);
             }
             else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
@@ -178,7 +252,14 @@ namespace FreeKassa.COM
             }
 
             var responseBody = await response.Content.ReadAsStringAsync();
-            return JsonConvert.DeserializeObject<CurrencyListResponse>(responseBody);
+            var responseJson = JsonConvert.DeserializeObject<CurrencyListResponse>(responseBody);
+
+            if (responseJson!.Type != "success")
+            {
+                throw new Exception("Неизвестный тип ответа.");
+            }
+
+            return responseJson;
         }
 
         /// <summary>
