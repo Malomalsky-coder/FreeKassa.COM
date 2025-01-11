@@ -1,22 +1,19 @@
 ﻿using Newtonsoft.Json;
+using System;
+using System.Collections.Generic;
+using System.Text;
 
 namespace FreeKassa.COM.ApiResponse
 {
     /// <summary>
-    /// Ответ на запрос возврата средств.
+    /// Ответ на запрос проверки статуса валюты.
     /// </summary>
-    public class RefundResponse
+    public class CheckCurrencyStatusResponse
     {
         /// <summary>
         /// Тип ответа (например, "success").
         /// </summary>
         [JsonProperty("type")]
         public string Type { get; set; }
-
-        /// <summary>
-        /// ID возврата.
-        /// </summary>
-        [JsonProperty("id")]
-        public int Id { get; set; }
     }
 }

@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using Newtonsoft.Json;
 
 namespace FreeKassa.COM.ApiResponse
 {
@@ -12,21 +10,25 @@ namespace FreeKassa.COM.ApiResponse
         /// <summary>
         /// Тип ответа (например, "success").
         /// </summary>
+        [JsonProperty("type")]
         public string Type { get; set; }
 
         /// <summary>
-        /// Идентификатор созданного заказа.
+        /// ID созданного заказа.
         /// </summary>
+        [JsonProperty("orderId")]
         public int OrderId { get; set; }
 
         /// <summary>
-        /// Хеш-код заказа, используемый для проверки целостности данных.
+        /// Хэш заказа.
         /// </summary>
+        [JsonProperty("orderHash")]
         public string OrderHash { get; set; }
 
         /// <summary>
-        /// URL-адрес для перенаправления клиента на страницу оплаты.
+        /// URL для оплаты заказа.
         /// </summary>
-        public string Location { get; set; }
+        [JsonProperty("location")]
+        public string PaymentUrl { get; set; }
     }
 }

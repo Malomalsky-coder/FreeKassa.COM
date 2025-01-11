@@ -3,8 +3,6 @@ using FreeKassa.COM.ApiResponse;
 using FreeKassa.COM.Exceptions;
 using Newtonsoft.Json;
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
@@ -98,7 +96,7 @@ namespace FreeKassa.COM
         /// }
         /// </code>
         /// </example>
-        public async Task<GetOrdersResponse> GetOrdersAsync(GetOrdersRequest request)
+        public async Task<OrdersResponse> GetOrdersAsync(GetOrdersRequest request)
         {
             request.Validate();
 
@@ -159,7 +157,7 @@ namespace FreeKassa.COM
             }
 
             var responseBody = await response.Content.ReadAsStringAsync();
-            var responseJson = JsonConvert.DeserializeObject<GetOrdersResponse>(responseBody);
+            var responseJson = JsonConvert.DeserializeObject<OrdersResponse>(responseBody);
 
             if (responseJson!.Type != "success")
             {
@@ -274,7 +272,7 @@ namespace FreeKassa.COM
             // Возвращаем ссылку на оплату
             if (orderResponse!.Type == "success")
             {
-                return orderResponse.Location;
+                return orderResponse.PaymentUrl;
             }
             else
             {
@@ -467,9 +465,8 @@ namespace FreeKassa.COM
             }
 
             var responseBody = await response.Content.ReadAsStringAsync();
-            var responseJson = JsonConvert.DeserializeObject<Dictionary<string, string>>(responseBody);
-
-            return responseJson["type"] == "success";
+            var responseJson = JsonConvert.DeserializeObject<CheckCurrencyStatusResponse>(responseBody);
+            return responseJson!.Type == "success";
         }
 
         #endregion

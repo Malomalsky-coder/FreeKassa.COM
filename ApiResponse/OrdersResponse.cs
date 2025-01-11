@@ -1,25 +1,23 @@
-﻿using System.Collections.Generic;
+﻿using Newtonsoft.Json;
+using System.Collections.Generic;
 
 namespace FreeKassa.COM.ApiResponse
 {
     /// <summary>
     /// Ответ на запрос получения списка заказов.
     /// </summary>
-    public class GetOrdersResponse
+    public class OrdersResponse
     {
         /// <summary>
-        /// Тип ответа.
+        /// Тип ответа (например, "success").
         /// </summary>
+        [JsonProperty("type")]
         public string Type { get; set; }
-
-        /// <summary>
-        /// Количество страниц.
-        /// </summary>
-        public int Pages { get; set; }
 
         /// <summary>
         /// Список заказов.
         /// </summary>
+        [JsonProperty("orders")]
         public List<Order> Orders { get; set; }
     }
 
