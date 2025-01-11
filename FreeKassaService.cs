@@ -27,8 +27,6 @@ namespace FreeKassa.COM
             _httpClient.BaseAddress = new Uri("https://api.freekassa.com/v1/");
         }
 
-        //TODO: Список заказов - https://docs.freekassa.com/#operation/getOrders
-        //TODO: Возврат - https://docs.freekassa.com/#operation/refundOrder
         //TODO: Список выплат - https://docs.freekassa.com/#operation/getWithdrawals
         //TODO: Создать выплату - https://docs.freekassa.com/#operation/createWithdrawal
         //TODO: Получение баланса - https://docs.freekassa.com/#operation/getBalance
