@@ -54,7 +54,7 @@ catch (Exception ex)
 }
 ```
 
-> Пример подключения в Web приложений
+> Пример подключения в Web приложение
 ``` csharp
 builder.Services.AddHttpClient<IFreeKassaService, FreeKassaService>((provider, client) =>
 {
