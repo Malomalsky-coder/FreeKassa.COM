@@ -6,6 +6,7 @@ using System;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
+using System.Web.Http;
 
 namespace FreeKassa.COM
 {
@@ -19,12 +20,11 @@ namespace FreeKassa.COM
         private readonly string _apiKey;
         private readonly string _shopId;
 
-        public FreeKassaService(string apiKey, string shopId)
+        public FreeKassaService(HttpClient httpClient, string apiKey, string shopId)
         {
-            _httpClient = new HttpClient();
+            _httpClient = httpClient;
             _apiKey = apiKey;
             _shopId = shopId;
-            _httpClient.BaseAddress = new Uri("https://api.freekassa.com/v1/");
         }
 
         //TODO: Список выплат - https://docs.freekassa.com/#operation/getWithdrawals
@@ -57,153 +57,157 @@ namespace FreeKassa.COM
         #region Заказы
 
         /// <summary>
-        /// Получает список заказов.
+        /// Получает список заказов на основе указанных параметров запроса.
         /// </summary>
         /// <param name="request">Параметры запроса для фильтрации заказов.</param>
-        /// <returns>Список заказов.</returns>
-        /// <exception cref="BadRequestException">Ошибка 400 (Bad Request).</exception>
-        /// <exception cref="UnauthorizedException">Ошибка 401 (Unauthorized).</exception>
-        /// <exception cref="Exception">Другие ошибки.</exception>
+        /// <returns>Ответ, содержащий список заказов.</returns>
+        /// <exception cref="ArgumentException">Выбрасывается, если входные параметры не прошли валидацию.</exception>
+        /// <exception cref="BadRequestException">Выбрасывается, если сервер вернул ошибку 400 (Bad Request).</exception>
+        /// <exception cref="UnauthorizedException">Выбрасывается, если сервер вернул ошибку 401 (Unauthorized).</exception>
+        /// <exception cref="ServerErrorException">Выбрасывается, если сервер вернул ошибку 500 (Internal Server Error).</exception>
+        /// <exception cref="ApiResponseException">Выбрасывается, если тип ответа не "success".</exception>
+        /// <exception cref="Exception">Выбрасывается при возникновении других ошибок.</exception>
         /// <example>
-        /// Пример использования:
         /// <code>
         /// var request = new GetOrdersRequest
         /// {
-        ///     OrderId = 123456789,
+        ///     OrderId = 123,
         ///     DateFrom = "2023-01-01",
-        ///     DateTo = "2023-12-31",
-        ///     Page = 1
+        ///     DateTo = "2023-12-31"
         /// };
-        ///
-        /// try
-        /// {
-        ///     var ordersResponse = await _freeKassaService.GetOrdersAsync(request);
-        ///     Console.WriteLine($"Найдено заказов: {ordersResponse.Orders.Count}");
-        /// }
-        /// catch (BadRequestException ex)
-        /// {
-        ///     Console.WriteLine($"Ошибка 400: {ex.Message}");
-        /// }
-        /// catch (UnauthorizedException)
-        /// {
-        ///     Console.WriteLine("Ошибка 401: Неверная авторизация.");
-        /// }
-        /// catch (Exception ex)
-        /// {
-        ///     Console.WriteLine($"Ошибка: {ex.Message}");
-        /// }
+        /// 
+        /// var ordersResponse = await freeKassaService.GetOrdersAsync(request);
+        /// Console.WriteLine($"Найдено заказов: {ordersResponse.Orders.Count}");
         /// </code>
         /// </example>
         public async Task<OrdersResponse> GetOrdersAsync(GetOrdersRequest request)
         {
+            // Проверка входных параметров
             request.Validate();
 
+            // Проверка входных параметров
             long nonce = CurrentUnixTimeInMilliseconds();
             string signature = GenerateSignature(nonce);
 
-            // Формируем URI с параметрами запроса
-            var requestUri = new StringBuilder($"orders?shopId={_shopId}&nonce={nonce}&signature={signature}");
+            // Формируем URI
+            var requestUri = new UriBuilder($"v1/orders")
+            {
+                Query = $"shopId={_shopId}&nonce={nonce}&signature={signature}"
+            };
 
             // Добавляем необязательные параметры
             if (request.OrderId.HasValue)
             {
-                requestUri.Append($"&orderId={request.OrderId}");
+                requestUri.Query += $"&orderId={request.OrderId}";
             }
 
             if (!string.IsNullOrEmpty(request.PaymentId))
             {
-                requestUri.Append($"&paymentId={request.PaymentId}");
+                requestUri.Query += $"&paymentId={request.PaymentId}";
             }
 
             if (request.OrderStatus.HasValue)
             {
-                requestUri.Append($"&orderStatus={request.OrderStatus}");
+                requestUri.Query += $"&orderStatus={request.OrderStatus}";
             }
 
             if (!string.IsNullOrEmpty(request.DateFrom))
             {
-                requestUri.Append($"&dateFrom={request.DateFrom}");
+                requestUri.Query += $"&dateFrom={request.DateFrom}";
             }
 
             if (!string.IsNullOrEmpty(request.DateTo))
             {
-                requestUri.Append($"&dateTo={request.DateTo}");
+                requestUri.Query += $"&dateTo={request.DateTo}";
             }
 
             if (request.Page.HasValue)
             {
-                requestUri.Append($"&page={request.Page}");
+                requestUri.Query += $"&page={request.Page}";
             }
 
-            // Отправляем GET-запрос
-            var response = await _httpClient.GetAsync(requestUri.ToString());
+            HttpResponseMessage? response = null;
 
-            // Обрабатываем ответ
-            if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            try
             {
-                var errorResponse = await response.Content.ReadAsStringAsync();
-                var error = JsonConvert.DeserializeObject<ApiErrorResponse>(errorResponse);
-                throw new BadRequestException(error!.Message);
-            }
-            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-            {
-                throw new UnauthorizedException();
-            }
-            else if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception($"Ошибка: {response.StatusCode}");
-            }
+                // Отправка GET-запроса
+                response = await _httpClient.GetAsync(requestUri.ToString());
 
-            var responseBody = await response.Content.ReadAsStringAsync();
-            var responseJson = JsonConvert.DeserializeObject<OrdersResponse>(responseBody);
+                // Проверка статуса ответа
+                response.EnsureSuccessStatusCode();
 
-            if (responseJson!.Type != "success")
-            {
-                throw new Exception("Неизвестный тип ответа.");
+                // Десериализация успешного ответа
+                var responseBody = await response.Content.ReadAsStringAsync();
+                var responseJson = JsonConvert.DeserializeObject<OrdersResponse>(responseBody);
+
+                if (responseJson!.Type != "success")
+                {
+                    throw new ApiResponseException("Неизвестный тип ответа.");
+                }
+
+                return responseJson;
             }
+            catch (HttpRequestException ex)
+            {
+                if (response != null)
+                {
+                    var statusCode = response.StatusCode;
+                    var errorResponse = await response.Content.ReadAsStringAsync();
 
-            return responseJson;
+                    if (statusCode == System.Net.HttpStatusCode.BadRequest)
+                    {
+                        var error = JsonConvert.DeserializeObject<ApiErrorResponse>(errorResponse);
+                        throw new BadRequestException(error!.Message);
+                    }
+                    else if (statusCode == System.Net.HttpStatusCode.Unauthorized)
+                    {
+                        throw new UnauthorizedException();
+                    }
+                    else if (statusCode == System.Net.HttpStatusCode.InternalServerError)
+                    {
+                        throw new ServerErrorException();
+                    }
+
+                    throw new Exception($"Ошибка: {statusCode} - {errorResponse}");
+                }
+                else
+                {
+                    throw new Exception($"Ошибка HTTP: {ex.Message}");
+                }
+            }
+            catch (JsonException ex)
+            {
+                throw new Exception($"Ошибка десериализации: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Ошибка: {ex.Message}");
+            }
         }
 
         /// <summary>
-        /// Создает новый заказ.
+        /// Создает новый заказ на основе указанных параметров запроса.
         /// </summary>
         /// <param name="request">Параметры запроса для создания заказа.</param>
-        /// <returns>URL для оплаты заказа.</returns>
-        /// <exception cref="BadRequestException">Ошибка 400 (Bad Request).</exception>
-        /// <exception cref="UnauthorizedException">Ошибка 401 (Unauthorized).</exception>
-        /// <exception cref="Exception">Другие ошибки.</exception>
+        /// <returns>Ответ, содержащий ссылку на оплату.</returns>
+        /// <exception cref="ArgumentException">Выбрасывается, если входные параметры не прошли валидацию.</exception>
+        /// <exception cref="BadRequestException">Выбрасывается, если сервер вернул ошибку 400 (Bad Request).</exception>
+        /// <exception cref="UnauthorizedException">Выбрасывается, если сервер вернул ошибку 401 (Unauthorized).</exception>
+        /// <exception cref="ServerErrorException">Выбрасывается, если сервер вернул ошибку 500 (Internal Server Error).</exception>
+        /// <exception cref="ApiResponseException">Выбрасывается, если тип ответа не "success".</exception>
+        /// <exception cref="Exception">Выбрасывается при возникновении других ошибок.</exception>
         /// <example>
-        /// Пример использования:
         /// <code>
         /// var request = new CreateOrderRequest
         /// {
         ///     PaymentSystemId = 1,
-        ///     Email = "test@example.com",
-        ///     Ip = "127.0.0.1",
+        ///     Email = "user@example.com",
         ///     Amount = 100.50m,
-        ///     Currency = "RUB",
-        ///     SuccessUrl = "https://example.com/success",
-        ///     FailureUrl = "https://example.com/failure"
+        ///     Currency = "RUB"
         /// };
-        ///
-        /// try
-        /// {
-        ///     var paymentUrl = await _freeKassaService.CreateOrderAsync(request);
-        ///     Console.WriteLine($"URL для оплаты: {paymentUrl}");
-        /// }
-        /// catch (BadRequestException ex)
-        /// {
-        ///     Console.WriteLine($"Ошибка 400: {ex.Message}");
-        /// }
-        /// catch (UnauthorizedException)
-        /// {
-        ///     Console.WriteLine("Ошибка 401: Неверная авторизация.");
-        /// }
-        /// catch (Exception ex)
-        /// {
-        ///     Console.WriteLine($"Ошибка: {ex.Message}");
-        /// }
+        /// 
+        /// var paymentUrl = await freeKassaService.CreateOrderAsync(request);
+        /// Console.WriteLine($"Ссылка на оплату: {paymentUrl}");
         /// </code>
         /// </example>
         public async Task<string> CreateOrderAsync(CreateOrderRequest request)
@@ -216,147 +220,187 @@ namespace FreeKassa.COM
             var signature = GenerateSignature(nonce);
 
             // Формируем URI с параметрами запроса
-            var requestUri = new StringBuilder($"orders/create?shopId={_shopId}&nonce={nonce}&signature={signature}&i={request.PaymentSystemId}&email={request.Email}&ip={request.Ip}&amount={request.Amount}&currency={request.Currency}");
+            var requestUri = new UriBuilder($"v1/orders/create")
+            {
+                Query = $"shopId={_shopId}&nonce={nonce}&signature={signature}&i={request.PaymentSystemId}&email={request.Email}&ip={request.Ip}&amount={request.Amount}&currency={request.Currency}"
+            };
 
             // Добавляем необязательные параметры
             if (!string.IsNullOrEmpty(request.PaymentId))
             {
-                requestUri.Append($"&paymentId={request.PaymentId}");
+                requestUri.Query += $"&paymentId={request.PaymentId}";
             }
 
             if (!string.IsNullOrEmpty(request.Tel))
             {
-                requestUri.Append($"&tel={request.Tel}");
+                requestUri.Query += $"&tel={request.Tel}";
             }
 
             if (!string.IsNullOrEmpty(request.SuccessUrl))
             {
-                requestUri.Append($"&success_url={request.SuccessUrl}");
+                requestUri.Query += $"&success_url={request.SuccessUrl}";
             }
 
             if (!string.IsNullOrEmpty(request.FailureUrl))
             {
-                requestUri.Append($"&failure_url={request.FailureUrl}");
+                requestUri.Query += $"&failure_url={request.FailureUrl}";
             }
 
             if (!string.IsNullOrEmpty(request.NotificationUrl))
             {
-                requestUri.Append($"&notification_url={request.NotificationUrl}");
+                requestUri.Query += $"&notification_url={request.NotificationUrl}";
             }
 
-            // Отправляем POST-запрос
-            var response = await _httpClient.PostAsync(requestUri.ToString(), null);
+            HttpResponseMessage? response = null;
 
-            // Обрабатываем ответ
-            if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            try
             {
-                var errorResponse = await response.Content.ReadAsStringAsync();
-                var error = JsonConvert.DeserializeObject<ApiErrorResponse>(errorResponse);
-                throw new BadRequestException(error!.Message);
-            }
-            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-            {
-                throw new UnauthorizedException();
-            }
-            else if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception($"Ошибка: {response.StatusCode}");
-            }
+                // Отправляем POST-запрос
+                response = await _httpClient.PostAsync(requestUri.ToString(), null);
 
-            // Читаем и десериализуем ответ
-            var responseBody = await response.Content.ReadAsStringAsync();
-            var orderResponse = JsonConvert.DeserializeObject<CreateOrderResponse>(responseBody);
+                // Проверяем статус ответа
+                response.EnsureSuccessStatusCode();
 
-            // Возвращаем ссылку на оплату
-            if (orderResponse!.Type == "success")
-            {
+                // Читаем и десериализуем ответ
+                var responseBody = await response.Content.ReadAsStringAsync();
+                var orderResponse = JsonConvert.DeserializeObject<CreateOrderResponse>(responseBody);
+                
+                if (orderResponse!.Type != "success")
+                {
+                    throw new ApiResponseException("Неизвестный тип ответа.");
+                }
+
+                // Возвращаем ссылку на оплату
                 return orderResponse.PaymentUrl;
             }
-            else
+            catch (HttpRequestException ex)
             {
-                throw new Exception("Неизвестный тип ответа.");
+                if (response != null)
+                {
+                    var statusCode = response.StatusCode;
+                    var errorResponse = await response.Content.ReadAsStringAsync();
+
+                    if (statusCode == System.Net.HttpStatusCode.BadRequest)
+                    {
+                        var error = JsonConvert.DeserializeObject<ApiErrorResponse>(errorResponse);
+                        throw new BadRequestException(error!.Message);
+                    }
+                    else if (statusCode == System.Net.HttpStatusCode.Unauthorized)
+                    {
+                        throw new UnauthorizedException();
+                    }
+                    else if (statusCode == System.Net.HttpStatusCode.InternalServerError)
+                    {
+                        throw new ServerErrorException();
+                    }
+
+                    throw new Exception($"Ошибка: {statusCode} - {errorResponse}");
+                }
+                else
+                {
+                    throw new Exception($"Ошибка HTTP: {ex.Message}");
+                }
+            }
+            catch (JsonException ex)
+            {
+                throw new Exception($"Ошибка десериализации: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Ошибка: {ex.Message}");
             }
         }
 
         /// <summary>
-        /// Выполняет возврат средств по заказу.
+        /// Выполняет возврат средств для указанного заказа.
         /// </summary>
-        /// <param name="orderId">Номер заказа Freekassa.</param>
-        /// <param name="paymentId">Номер заказа в магазине.</param>
-        /// <returns>Ответ от сервера с результатом возврата.</returns>
-        /// <exception cref="BadRequestException">Ошибка 400 (Bad Request).</exception>
-        /// <exception cref="UnauthorizedException">Ошибка 401 (Unauthorized).</exception>
-        /// <exception cref="Exception">Другие ошибки.</exception>
+        /// <param name="orderId">Идентификатор заказа (опционально).</param>
+        /// <param name="paymentId">Идентификатор платежа (опционально).</param>
+        /// <returns>Идентификатор возврата.</returns>
+        /// <exception cref="ArgumentException">Выбрасывается, если не указаны orderId или paymentId.</exception>
+        /// <exception cref="BadRequestException">Выбрасывается, если сервер вернул ошибку 400 (Bad Request).</exception>
+        /// <exception cref="UnauthorizedException">Выбрасывается, если сервер вернул ошибку 401 (Unauthorized).</exception>
+        /// <exception cref="ServerErrorException">Выбрасывается, если сервер вернул ошибку 500 (Internal Server Error).</exception>
+        /// <exception cref="ApiResponseException">Выбрасывается, если тип ответа не "success".</exception>
+        /// <exception cref="Exception">Выбрасывается при возникновении других ошибок.</exception>
         /// <example>
-        /// Пример использования:
         /// <code>
-        /// try
-        /// {
-        ///     var refundResponse = await _freeKassaService.RefundAsync(orderId: 123456789);
-        ///     Console.WriteLine($"Возврат успешно выполнен. ID возврата: {refundResponse.Id}");
-        /// }
-        /// catch (BadRequestException ex)
-        /// {
-        ///     Console.WriteLine($"Ошибка 400: {ex.Message}");
-        /// }
-        /// catch (UnauthorizedException)
-        /// {
-        ///     Console.WriteLine("Ошибка 401: Неверная авторизация.");
-        /// }
-        /// catch (Exception ex)
-        /// {
-        ///     Console.WriteLine($"Ошибка: {ex.Message}");
-        /// }
+        /// var refundId = await freeKassaService.RefundOrderAsync(orderId: 123);
+        /// Console.WriteLine($"Идентификатор возврата: {refundId}");
         /// </code>
         /// </example>
-        public async Task<RefundResponse> RefundAsync(int? orderId = null, string paymentId = null)
+        public async Task<int> RefundOrderAsync(int? orderId = null, string? paymentId = null)
         {
+            // Проверка входных параметров
             if (orderId == null && string.IsNullOrEmpty(paymentId))
             {
-                throw new ArgumentException("Необходимо указать orderId или paymentId.");
+                throw new ArgumentException("Необходимо указать orderId и paymentId.");
             }
 
+            // Проверка входных параметров
             long nonce = CurrentUnixTimeInMilliseconds();
             string signature = GenerateSignature(nonce);
 
-            var requestUri = new StringBuilder($"refund?shopId={_shopId}&nonce={nonce}&signature={signature}");
+            // Формирование URI
+            var requestUri = $"v1/order/refund?shopId={_shopId}&nonce={nonce}&signature={signature}&orderId={orderId}&paymentId={paymentId}";
 
-            if (orderId.HasValue)
+            HttpResponseMessage? response = null;
+
+            try
             {
-                requestUri.Append($"&orderId={orderId}");
-            }
+                // Отправка POST-запроса
+                response = await _httpClient.PostAsync(requestUri, null);
 
-            if (!string.IsNullOrEmpty(paymentId))
+                // Проверка статуса ответа
+                response.EnsureSuccessStatusCode();
+
+                // Десериализация успешного ответа
+                var responseBody = await response.Content.ReadAsStringAsync();
+                var responseJson = JsonConvert.DeserializeObject<RefundResponse>(responseBody);
+
+                if (responseJson!.Type != "success")
+                {
+                    throw new ApiResponseException("Неизвестный тип ответа.");
+                }
+
+                return responseJson.Id;
+            }
+            catch (HttpRequestException ex)
             {
-                requestUri.Append($"&paymentId={paymentId}");
+                if (response != null)
+                {
+                    var statusCode = response.StatusCode;
+                    var errorResponse = await response.Content.ReadAsStringAsync();
+
+                    if (statusCode == System.Net.HttpStatusCode.BadRequest)
+                    {
+                        var error = JsonConvert.DeserializeObject<ApiErrorResponse>(errorResponse);
+                        throw new BadRequestException(error!.Message);
+                    }
+                    else if (statusCode == System.Net.HttpStatusCode.Unauthorized)
+                    {
+                        throw new UnauthorizedException();
+                    }
+                    else if (statusCode == System.Net.HttpStatusCode.InternalServerError)
+                    {
+                        throw new ServerErrorException();
+                    }
+
+                    throw new Exception($"Ошибка: {statusCode} - {errorResponse}");
+                }
+                else
+                {
+                    throw new Exception($"Ошибка HTTP: {ex.Message}");
+                }
             }
-
-            var response = await _httpClient.PostAsync(requestUri.ToString(), null);
-
-            if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            catch (JsonException ex)
             {
-                var errorResponse = await response.Content.ReadAsStringAsync();
-                var error = JsonConvert.DeserializeObject<ApiErrorResponse>(errorResponse);
-                throw new BadRequestException(error!.Message);
+                throw new Exception($"Ошибка десериализации: {ex.Message}");
             }
-            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            catch (Exception ex)
             {
-                throw new UnauthorizedException();
+                throw new Exception($"Ошибка: {ex.Message}");
             }
-            else if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception($"Ошибка: {response.StatusCode}");
-            }
-
-            var responseBody = await response.Content.ReadAsStringAsync();
-            var responseJson = JsonConvert.DeserializeObject<RefundResponse>(responseBody);
-
-            if (responseJson!.Type != "success")
-            {
-                throw new Exception("Неизвестный тип ответа.");
-            }
-
-            return responseJson;
         }
 
         #endregion
@@ -367,104 +411,163 @@ namespace FreeKassa.COM
         #region Разное
 
         /// <summary>
-        /// Проверяет статус валюты.
+        /// Получает список доступных валют.
         /// </summary>
-        /// <param name="currency">Код валюты для проверки.</param>
-        /// <returns>Статус валюты.</returns>
-        /// <exception cref="BadRequestException">Ошибка 400 (Bad Request).</exception>
-        /// <exception cref="UnauthorizedException">Ошибка 401 (Unauthorized).</exception>
-        /// <exception cref="Exception">Другие ошибки.</exception>
+        /// <returns>Ответ, содержащий список валют.</returns>
+        /// <exception cref="BadRequestException">Выбрасывается, если сервер вернул ошибку 400 (Bad Request).</exception>
+        /// <exception cref="UnauthorizedException">Выбрасывается, если сервер вернул ошибку 401 (Unauthorized).</exception>
+        /// <exception cref="ServerErrorException">Выбрасывается, если сервер вернул ошибку 500 (Internal Server Error).</exception>
+        /// <exception cref="ApiResponseException">Выбрасывается, если тип ответа не "success".</exception>
+        /// <exception cref="Exception">Выбрасывается при возникновении других ошибок.</exception>
         /// <example>
-        /// Пример использования:
         /// <code>
-        /// try
-        /// {
-        ///     var statusResponse = await _freeKassaService.CheckCurrencyStatusAsync("RUB");
-        ///     Console.WriteLine($"Статус валюты RUB: {statusResponse.Status}");
-        /// }
-        /// catch (BadRequestException ex)
-        /// {
-        ///     Console.WriteLine($"Ошибка 400: {ex.Message}");
-        /// }
-        /// catch (UnauthorizedException)
-        /// {
-        ///     Console.WriteLine("Ошибка 401: Неверная авторизация.");
-        /// }
-        /// catch (Exception ex)
-        /// {
-        ///     Console.WriteLine($"Ошибка: {ex.Message}");
-        /// }
+        /// var currenciesResponse = await freeKassaService.GetCurrenciesAsync();
+        /// Console.WriteLine($"Доступные валюты: {string.Join(", ", currenciesResponse.Currencies)}");
         /// </code>
         /// </example>
         public async Task<CurrenciesResponse> GetCurrenciesAsync()
         {
+            // Генерация подписи
             long nonce = CurrentUnixTimeInMilliseconds();
             string signature = GenerateSignature(nonce);
 
-            var requestUri = $"currencies?shopId={_shopId}&nonce={nonce}&signature={signature}";
+            var requestUri = $"v1/currencies?shopId={_shopId}&nonce={nonce}&signature={signature}";
 
-            var response = await _httpClient.GetAsync(requestUri);
+            HttpResponseMessage? response = null;
 
-            if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            try
             {
-                var errorResponse = await response.Content.ReadAsStringAsync();
-                var error = JsonConvert.DeserializeObject<ApiErrorResponse>(errorResponse);
-                throw new BadRequestException(error!.Message);
-            }
-            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-            {
-                throw new UnauthorizedException();
-            }
-            else if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception($"Ошибка: {response.StatusCode}");
-            }
+                // Отправка GET-запроса
+                response = await _httpClient.GetAsync(requestUri.ToString());
 
-            var responseBody = await response.Content.ReadAsStringAsync();
-            var responseJson = JsonConvert.DeserializeObject<CurrenciesResponse>(responseBody);
+                // Проверка статуса ответа
+                response.EnsureSuccessStatusCode();
 
-            if (responseJson!.Type != "success")
-            {
-                throw new Exception("Неизвестный тип ответа.");
+                // Десериализация успешного ответа
+                var responseBody = await response.Content.ReadAsStringAsync();
+                var responseJson = JsonConvert.DeserializeObject<CurrenciesResponse>(responseBody);
+
+                if (responseJson!.Type != "success")
+                {
+                    throw new ApiResponseException("Неизвестный тип ответа.");
+                }
+
+                return responseJson;
             }
+            catch (HttpRequestException ex)
+            {
+                if (response != null)
+                {
+                    var statusCode = response.StatusCode;
+                    var errorResponse = await response.Content.ReadAsStringAsync();
 
-            return responseJson;
+                    if (statusCode == System.Net.HttpStatusCode.BadRequest)
+                    {
+                        var error = JsonConvert.DeserializeObject<ApiErrorResponse>(errorResponse);
+                        throw new BadRequestException(error!.Message);
+                    }
+                    else if (statusCode == System.Net.HttpStatusCode.Unauthorized)
+                    {
+                        throw new UnauthorizedException();
+                    }
+                    else if (statusCode == System.Net.HttpStatusCode.InternalServerError)
+                    {
+                        throw new ServerErrorException();
+                    }
+
+                    throw new Exception($"Ошибка: {statusCode} - {errorResponse}");
+                }
+                else
+                {
+                    throw new Exception($"Ошибка HTTP: {ex.Message}");
+                }
+            }
+            catch (JsonException ex)
+            {
+                throw new Exception($"Ошибка десериализации: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Ошибка: {ex.Message}");
+            }
         }
 
         /// <summary>
         /// Проверяет статус валюты.
         /// </summary>
-        /// <returns>True, если валюта доступна, False в противном случае.</returns>
-        /// <exception cref="BadRequestException">Возникает при ошибке 400 (Bad Request).</exception>
-        /// <exception cref="UnauthorizedException">Возникает при ошибке 401 (Unauthorized).</exception>
-        /// <exception cref="Exception">Возникает при других ошибках.</exception>
-        public async Task<bool> CheckCurrencyStatusAsync()
+        /// <returns>Возвращает <c>true</c>, если статус валюты активен, иначе <c>false</c>.</returns>
+        /// <exception cref="BadRequestException">Выбрасывается, если сервер вернул ошибку 400 (Bad Request).</exception>
+        /// <exception cref="UnauthorizedException">Выбрасывается, если сервер вернул ошибку 401 (Unauthorized).</exception>
+        /// <exception cref="ServerErrorException">Выбрасывается, если сервер вернул ошибку 500 (Internal Server Error).</exception>
+        /// <exception cref="ApiResponseException">Выбрасывается, если тип ответа не "success".</exception>
+        /// <exception cref="Exception">Выбрасывается при возникновении других ошибок.</exception>
+        /// <example>
+        /// <code>
+        /// bool isCurrencyActive = await freeKassaService.CheckCurrencyStatusAsync();
+        /// Console.WriteLine($"Статус валюты: {(isCurrencyActive ? "Активна" : "Неактивна")}");
+        /// </code>
+        /// </example>
+        public async Task<bool> CheckCurrencyStatusAsync(int id)
         {
+            // Генерация подписи
             long nonce = CurrentUnixTimeInMilliseconds();
             string signature = GenerateSignature(nonce);
 
-            var requestUri = $"check?shopId={_shopId}&nonce={nonce}&signature={signature}";
+            var requestUri = $"v1/currencies/{id}/status?shopId={_shopId}&nonce={nonce}&signature={signature}";
 
-            var response = await _httpClient.GetAsync(requestUri);
+            HttpResponseMessage? response = null;
 
-            if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            try
             {
-                var errorResponse = await response.Content.ReadAsStringAsync();
-                var error = JsonConvert.DeserializeObject<ApiErrorResponse>(errorResponse);
-                throw new BadRequestException(error.Message);
-            }
-            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-            {
-                throw new UnauthorizedException();
-            }
-            else if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception($"Ошибка: {response.StatusCode}");
-            }
+                // Отправка GET-запроса
+                response = await _httpClient.GetAsync(requestUri.ToString());
 
-            var responseBody = await response.Content.ReadAsStringAsync();
-            var responseJson = JsonConvert.DeserializeObject<CheckCurrencyStatusResponse>(responseBody);
-            return responseJson!.Type == "success";
+                // Проверка статуса ответа
+                response.EnsureSuccessStatusCode();
+
+                // Десериализация успешного ответа
+                var responseBody = await response.Content.ReadAsStringAsync();
+                var responseJson = JsonConvert.DeserializeObject<CheckCurrencyStatusResponse>(responseBody);
+
+                // Возвращаем результат проверки
+                return responseJson!.Type == "success";
+            }
+            catch (HttpRequestException ex)
+            {
+                if (response != null)
+                {
+                    var statusCode = response.StatusCode;
+                    var errorResponse = await response.Content.ReadAsStringAsync();
+
+                    if (statusCode == System.Net.HttpStatusCode.BadRequest)
+                    {
+                        var error = JsonConvert.DeserializeObject<ApiErrorResponse>(errorResponse);
+                        throw new BadRequestException(error!.Message);
+                    }
+                    else if (statusCode == System.Net.HttpStatusCode.Unauthorized)
+                    {
+                        throw new UnauthorizedException();
+                    }
+                    else if (statusCode == System.Net.HttpStatusCode.InternalServerError)
+                    {
+                        throw new ServerErrorException();
+                    }
+
+                    throw new Exception($"Ошибка: {statusCode} - {errorResponse}");
+                }
+                else
+                {
+                    throw new Exception($"Ошибка HTTP: {ex.Message}");
+                }
+            }
+            catch (JsonException ex)
+            {
+                throw new Exception($"Ошибка десериализации: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Ошибка: {ex.Message}");
+            }
         }
 
         #endregion

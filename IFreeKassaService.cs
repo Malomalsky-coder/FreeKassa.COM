@@ -22,7 +22,7 @@ namespace FreeKassa.COM
         /// <summary>
         /// Выполняет возврат средств для указанного заказа.
         /// </summary>
-        //Task<object> RefundOrderAsync(object request);
+        Task<int> RefundOrderAsync(int? orderId = null, string? paymentId = null);
 
         /// <summary>
         /// Получает список выплат.
@@ -47,7 +47,7 @@ namespace FreeKassa.COM
         /// <summary>
         /// Проверяет доступность указанной платежной системы для оплаты.
         /// </summary>
-        Task<bool> CheckCurrencyStatusAsync();
+        Task<bool> CheckCurrencyStatusAsync(int id);
 
         /// <summary>
         /// Получает список доступных платежных систем для вывода средств.
